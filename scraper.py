@@ -1,59 +1,18 @@
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time, os, platform
 import json
 
-URL = 'https://www.yelp.com/search?find_desc=Takeout&find_loc=CT06901'
+URL = 'https://www.yelp.com/search?find_desc=Takeout&find_loc=CT06901&attrs=RestaurantsTakeOut&start='
 MENU = '1599675614973x652726785232916400'
-
-
+ZIP_CODES = ['06901', '06902', '06903', '06904', '06905', '06906', '06907', '06910', '06911', '06912', '06913', '06914', '06926', '06927']
 
 dirpath = os.getcwd()
 chromepath = dirpath + '/assets/chromedriver_%s' % (platform.system()).lower()
-
-
-def get_item(browser, id):
-    """ given an id, scrape a menu item and all of its options """
-    #button = browser.find_element_by_id(id)
-    browser.execute_script("arguments[0].click();", id)
-    time.sleep(1)
-
-    innerHTML = browser.page_source
-    html = BeautifulSoup(innerHTML, 'html.parser')
-
-    _options = []
-
-    options = html.find_all('div', class_='menuItemModal-options') # menuItemModal-choice-option-description
-    for option in options:
-        single_option=dict()
-        single_option['modifiername_text'] = name = option.find(class_='menuItemModal-choice-name').text
-
-        instruction_text = option.find(class_='menuItemModal-choice-instructions').text.replace('.','').split(' - ')
-
-        if instruction_text[0] == 'Required':
-            single_option['required_boolean']=True
-            single_option['numberallowedselections_number']= [int(s) for s in instruction_text[1].split() if s.isdigit()][0]
-        else:
-            single_option['required_boolean']=False
-            if instruction_text[1] == "Choose as many as you like":
-                single_option['numberallowedselections_number']=0
-            else:
-                single_option['numberallowedselections_number']= [int(s) for s in instruction_text[1].split() if s.isdigit()][0]
-
-        _choices=[]
-        choices = option.find_all('span', class_='menuItemModal-choice-option-description')
-        for choice in choices:
-            #print(choice.text.split(' + ')[0] + choice.text.split(' + ')[1])
-            if ' + ' in choice.text:
-                _choices.append({'name_text':choice.text.split(' + ')[0], 'price_number':float(choice.text.split(' + ')[1].replace('$', ''))})
-            else:
-                _choices.append({'name_text':choice.text, 'price_number':0})
-
-        single_option['modifiermenuitems_list_custom_menuitem'] = _choices
-        #append the dictionary
-        _options.append(single_option)
-    return _options
 
 def get_menu(url):
     """ given a valid grubhub url, scrape the menu of a restaurant """
@@ -63,6 +22,7 @@ def get_menu(url):
     #chrome_options.add_argument("--headless")
 
     browser = webdriver.Chrome(options=chrome_options, executable_path = chromepath)
+    browser.implicitly_wait(100)
     browser.get(url)
     time.sleep(10)
     innerHTML = browser.page_source
@@ -88,7 +48,11 @@ def get_menu(url):
             time.sleep(10)
             driver.execute_script("window.history.go(-1)")
             try:
+                element = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "myDynamicElement"))
+    )
                 message_button = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[5]/div/div[2]/button/div/span/p')
+
                 message_button.click()
                 success_count += 1
                 driver.execute_script("window.history.go(-1)")
@@ -140,53 +104,94 @@ def iterate_merchants(url):
     print('Running...')
     success_count = 0
     failure_count = 0
-    chrome_options = Options()
+
+
     # To disable headless mode (for debugging or troubleshooting), comment out the following line:
     #chrome_options.add_argument("--headless")
-
+    chrome_options = Options()
     browser = webdriver.Chrome(options=chrome_options, executable_path = chromepath)
+    browser.implicitly_wait(5)
     browser.get(url)
     time.sleep(10)
+
     innerHTML = browser.page_source
-
     html = BeautifulSoup(innerHTML, 'html.parser')
+
     menu = html.find_all("ul",{"class":"lemon--ul__09f24__1_cxs undefined list__09f24__17TsU"})[0]
-    print(menu['class'])
-    #menu = html.find_element(By.XPATH, '//*[@id="ghs-restaurant-menu"]/div/div/ghs-impression-tracker/div')
-    if menu is None:
-        print('menu fail')
-        get_menu(url)
-        return
-
-    # Merchants
     merchants = menu.find_all('li', {'class':'lemon--li__09f24__1r9wz border-color--default__09f24__R1nRO'})
-    #merchants = browser.find_elements_by_class_name('lemon--li__09f24__1r9wz border-color--default__09f24__R1nRO')
 
-    print(len(merchants))
-    for i in range(1, len(merchants)):
+    all_merchants = list()
+    for i in range(6, 16):
         try:
+            # find the merchant to click
             element = browser.find_element_by_xpath("/html/body/div[1]/div[4]/div/div[1]/div[1]/div[2]/div[2]/ul/li[%i]/div" % i)
             element.click()
-            time.sleep(10)
-            #driver.execute_script("window.history.go(-1)")
+
+
             try:
-                message_button = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[5]/div/div[2]/button/div/span/p')
+                innerHTML = browser.page_source
+                html = BeautifulSoup(innerHTML, 'html.parser')
+                last_index = len(html.find_all('div', {'class':'island-section__373c0__3SUh7'}))
+                sections = html.find_all('section', {'class':'lemon--section__373c0__fNwDM margin-b3__373c0__q1DuY border-color--default__373c0__3-ifU'})
+                for section_index in range(0, len(sections)):
+                    children = sections[section_index].findChildren("div" , recursive=False)
+                    for child in children:
+                        if child.get('class') == 'lemon--div__373c0__1mboc padding-t3__373c0__1gw9E padding-r3__373c0__57InZ padding-b3__373c0__342DA padding-l3__373c0__1scQ0 border--top__373c0__3gXLy border--right__373c0__1n3Iv border--bottom__373c0__3qNtD border--left__373c0__d1B7K border-radius--regular__373c0__3KbYS background-color--white__373c0__2uyKj':
+                            section_index += 1
+                            break
+
+                message_button = WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[%i]/div/div[%i]/div/div[2]/button/div/span/p' % (section_index, last_index))))
+                #message_button = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[%i]/div/div[%i]/div/div[2]/button/div/span/p' % (section_index, last_index))
+
+                if(message_button):
+                    print('creating merchant object')
+                    merchant = dict()
+                    merchant['name'] = html.find('h1', class_='lemon--h1__373c0__2ZHSL heading--h1__373c0__dvYgw undefined heading--inline__373c0__10ozy').text
+                    merchant['phone_number'] = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[2]/div/div[2]/p[2]').text
+                    merchant['website'] = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[1]/div/div[2]/p[2]/a').text
+
                 message_button.click()
                 print('Button found')
+
+                browser.find_element_by_id('message-textarea').send_keys('test')
+                browser.find_element_by_id('firstname-input').send_keys('name')
+                browser.find_element_by_name('email').send_keys('email_test')
+
+                close_button = browser.find_element_by_xpath('//*[@id="modal-portal-container"]/div/div/div/div/div[1]/p/a')
+                close_button.click()
+
+
                 success_count += 1
-                #driver.execute_script("window.history.go(-1)")
-                #browser.back()
-            except:
+                all_merchants.append(merchant)
+                print(all_merchants)
+                browser.back()
+            except Exception as e:
                 print('No message button')
+                print(e)
                 failure_count += 1
                 #driver.execute_script("window.history.go(-1)")
-                if (browser.current_url != URL):
+                if (browser.current_url != url):
                     browser.back()
         except:
             pass
 
     print(success_count)
     print(failure_count)
+    print(all_merchants)
     browser.quit()
-iterate_merchants(URL)
-#example link: 'https://www.grubhub.com/restaurant/insomnia-cookies-76-pearl-st-new-york/295836'
+    return all_merchants
+
+
+
+data_dict = dict()
+data_dict['data'] = list()
+for zip_code in ZIP_CODES[2:3]:
+    for page_number in range(1):
+
+        data_dict['data'] = data_dict['data'] + iterate_merchants('https://www.yelp.com/search?find_desc=Takeout&find_loc=CT%s&attrs=RestaurantsTakeOut&start=%i' % (zip_code, page_number*10))
+        #iterate_merchants(URL + str(page_number * 10))
+
+path = '/'.join(os.path.realpath(__file__).split('/')[:-1])
+with open(f'{path}/data.json', 'w') as f:
+    json.dump(data_dict, f, indent=4)
+print('[Finished]')
