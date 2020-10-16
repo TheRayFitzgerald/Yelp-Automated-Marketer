@@ -4,11 +4,18 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time, sys, os, platform
-import json
+import time, sys, os, platform, csv, json
+
 
 URL = 'https://www.yelp.com/search?find_desc=Takeout&find_loc=CT06901&attrs=RestaurantsTakeOut&start='
 ZIP_CODES = ['06901', '06902', '06903', '06904', '06905', '06906', '06907', '06910', '06911', '06912', '06913', '06914', '06926', '06927']
+
+SENDER_EMAIL = 'seang@servuss.com'
+SENDER_NAME = 'Sean Gibson'
+OUTBOUND_MESSAGE = ""
+
+f = open("outbound_message.txt", "r")
+OUTBOUND_MESSAGE = f.read()
 
 dirpath = os.getcwd()
 chromepath = dirpath + '/assets/chromedriver_%s' % (platform.system()).lower()
@@ -25,7 +32,7 @@ def get_section_index(rows, section_index):
 
 def execute_on_merchant(url):
     success_count = 0
-    failure_count = 0
+    not_messageable_count = 0
 
     chrome_options = Options()
     browser = webdriver.Chrome(options=chrome_options, executable_path = chromepath)
@@ -86,21 +93,21 @@ def execute_on_merchant(url):
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         print(exc_type, fname, exc_tb.tb_lineno)
-        failure_count += 1
+        not_messageable_count += 1
 
 
 
 def iterate_merchants(browser, url):
+    open("data.csv", "w")
     """ given a valid grubhub url, scrape the menu of a restaurant """
     print('Running...')
     success_count = 0
-    failure_count = 0
     not_messageable_count = 0
     all_merchants = list()
 
     browser.get(url)
 
-    for i in range(6, 16):
+    for i in range(8, 13):
         try:
             # find the merchant to click
             element = WebDriverWait(browser, 7).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[4]/div/div[1]/div[1]/div[2]/div[2]/ul/li[%i]/div' % i)))
@@ -127,39 +134,38 @@ def iterate_merchants(browser, url):
                 #last_index = len(browser.find_elements_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div'))
                 #section_index = 1
 
-                message_button = WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.XPATH, '//button[@class="link__373c0__343sR"]/div/span/p')))
+                message_button = WebDriverWait(browser, 4).until(EC.element_to_be_clickable((By.XPATH, '//button[@class="link__373c0__343sR"]/div/span/p')))
 
 
                 #message_button = browser.find_element_by_xpath('//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[%i]/div/div[%i]/div/div[2]/button/div/span/p' % (section_index, last_index))
 
                 if(message_button):
+                    print('############')
                     print('creating merchant object')
                     merchant = dict()
                     #merchant['name'] = html.find('h1', class_='lemon--h1__373c0__2ZHSL heading--h1__373c0__dvYgw undefined heading--inline__373c0__10ozy').text
                     items = WebDriverWait(browser, 7).until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="lemon--div__373c0__1mboc island-section__373c0__3SUh7 border--top__373c0__3gXLy border-color--default__373c0__3-ifU"]')))
 
                     merchant['name'] = WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[1]/div[1]/div/div/div[1]/h1'))).text
-                    #merchant['phone_number'] = WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[2]/div/div[2]/p[2]'))).text
+
                     merchant['phone_number'] = items[1].find_element_by_xpath('.//div/div[2]/p[2]').text
                     merchant['website'] = items[0].find_element_by_xpath('.//div/div[2]/p[2]/a').text
-                    #merchant['website'] = WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[1]/div/div[1]/div/div[2]/p[2]/a'))).text
-                    #merchant['website'] = WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//div[1][@class="island-section__373c0__3SUh7"]/div/div[2]/p[2]/a'))).text
-                                                                                #                                     //*[@id="wrap"]/div[3]/div/div[4]/div/div/div[2]/div/div/div[1]/div/div[2]/div/div/section[2]/div/div[1]/div/div[2]/p[2]/a
                     merchant['address'] = WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//address[@class="lemon--address__373c0__2sPac"]/p[1]/span'))).text + \
                         ', ' + WebDriverWait(browser, 7).until(EC.presence_of_element_located((By.XPATH, '//address[@class="lemon--address__373c0__2sPac"]/p[2]/span'))).text
+                    merchant['yelp_url'] = browser.current_url
 
                 message_button.click()
-                WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, 'message-textarea'))).send_keys('test')
-                WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.ID, 'firstname-input'))).send_keys('test')
-                WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.NAME, 'email'))).send_keys('test')
-
+                WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, 'message-textarea'))).send_keys(OUTBOUND_MESSAGE % merchant['name'])
+                WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.ID, 'firstname-input'))).send_keys(SENDER_NAME)
+                WebDriverWait(browser, 5).until(EC.element_to_be_clickable((By.NAME, 'email'))).send_keys(SENDER_EMAIL)
+                time.sleep(30)
                 #browser.find_element_by_id('message-textarea').send_keys('test')
                 #browser.find_element_by_id('firstname-input').send_keys('name')
                 #browser.find_element_by_name('email').send_keys('email_test')
 
                 close_button = browser.find_element_by_xpath('//*[@id="modal-portal-container"]/div/div/div/div/div[1]/p/a')
                 close_button.click()
-                print('############')
+
                 print('Message Sent Successfully\nRestaurant Number: %i' % (i-5))
                 print('############\n')
                 success_count += 1
@@ -178,61 +184,64 @@ def iterate_merchants(browser, url):
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 print(exc_type, fname, exc_tb.tb_lineno)
                 print('############\n')
-                failure_count += 1
+                not_messageable_count += 1
                 #driver.execute_script("window.history.go(-1)")
                 if (browser.current_url != url):
                     browser.back()
         except:
             pass
 
-    #print(success_count)
-    #print(failure_count)
+
     return_dict = dict()
     return_dict['merchants'] = all_merchants
     return_dict['success_count'] = success_count
-    return_dict['failure_count'] = failure_count
     return_dict['not_messageable_count'] = not_messageable_count
 
-    print(all_merchants)
     browser.quit()
     return return_dict
 
 
 def main():
     success_count = 0
-    failure_count = 0
     not_messageable_count = 0
     total_merchants = 0
     start = time.time()
     data_dict = dict()
     data_dict['data'] = list()
 
+    with open('data.csv', mode='w') as csv_file:
+        fieldnames = ['Name', 'Company Domain Name', 'Phone Number', 'Address']
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
 
     chrome_options = Options()
     # To disable headless mode (for debugging or troubleshooting), comment out the following line:
-    chrome_options.add_argument("--headless")
+    #chrome_options.add_argument("--headless")
     browser = webdriver.Chrome(options=chrome_options, executable_path = chromepath)
 
-    for zip_code in ZIP_CODES[3:6]:
+    for zip_code in ZIP_CODES[4:6]:
         for page_number in range(1):
             try:
                 print('Zip Code: %s\nPage Number: %i' % (zip_code, page_number))
-                return_dict = iterate_merchants(browser, 'https://www.yelp.com/search?find_desc=Takeout&find_loc=CT%s&attrs=RestaurantsTakeOut&start=%i' % (zip_code, page_number*10))
+                with open('data.csv', mode='w') as csv_file:
+                    return_dict = iterate_merchants(browser, 'https://www.yelp.com/search?find_desc=Takeout&find_loc=CT%s&attrs=RestaurantsTakeOut&start=%i' % (zip_code, page_number*10))
 
                 data_dict['data'] = data_dict['data'] + return_dict['merchants']
                 success_count += return_dict['success_count']
-                failure_count += return_dict['failure_count']
                 not_messageable_count += return_dict['not_messageable_count']
                 total_merchants += 10
-                #data_dict['data'] = data_dict['data'] + iterate_merchants('https://www.yelp.com/search?find_desc=Takeout&find_loc=CT%s&attrs=RestaurantsTakeOut&start=%i' % (zip_code, page_number*10))
-                #iterate_merchants(URL + str(page_number * 10))
+                if success_count > 2:
+                    break
+
             except Exception as e:
-                print('Post code doesnt have this many pages %i' % page_number)
                 print(e)
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 print(exc_type, fname, exc_tb.tb_lineno)
 
+        if success_count > 1:
+            print('breaking again')
+            break
     path = '/'.join(os.path.realpath(__file__).split('/')[:-1])
     with open(f'{path}/data.json', 'w') as f:
         json.dump(data_dict, f, indent=4)
@@ -241,14 +250,12 @@ def main():
     print('---------------------------------')
     print('Total Merchants: %i' % total_merchants)
     print('Success Count: %i' % success_count)
-    print('Failure Count: %i' % failure_count)
     print('Not Messageable Count: %i' % not_messageable_count)
     print('Time taken: ')
-    #print(success_count)
-    #print(failure_count)
     print(end - start)
 
 if __name__ == '__main__':
+
     #execute_on_merchant('https://www.yelp.com/biz/the-stillery-stamford?osq=Takeout')
     main()
 
